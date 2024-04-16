@@ -191,6 +191,7 @@ local function friendly_airspace(pos, name)
 			flak = true
 		end
 		owners[area.owner] = true
+		-- TODO: also check xp and priv protection
 	end
 	if flak and not owners[name] then
 		return false
