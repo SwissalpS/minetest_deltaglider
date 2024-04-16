@@ -20,6 +20,7 @@ minetest.register_craftitem("glider:rocket", {
 		end
 
 		luaent.speed = luaent.speed + luaent.time_from_last_rocket
+print('rspeed: '..luaent.speed)
 		luaent.time_from_last_rocket = 0
 
 		-- Add some fancy particles

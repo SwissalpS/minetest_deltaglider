@@ -1,3 +1,21 @@
+
+local HUDS = {}
+function DEBUGHUD(player, text)player:hud_change(HUDS[player:get_player_name()], "text", text or "")end
+minetest.register_on_leaveplayer(function(player)HUDS[player:get_player_name()]=nil end)
+minetest.register_on_joinplayer(function(player)
+	if HUDS[player:get_player_name()] then return end
+	HUDS[player:get_player_name()] = player:hud_add({
+		hud_elem_type = "text",
+		position  = {x = 0.5, y = 0.6},
+		offset    = {x = 0, y = 0},
+		text      = "DEBUG HUD",
+		alignment = 0,
+		scale     = { x = 300, y = 90},
+		--size      = { x = 100, y = 100},
+		number    = 0xFFFFFF,
+	})
+end)
+
 -- pull some often used (and unlikely to be overriden)
 -- functions to local scope
 local math_abs = math.abs
@@ -12,12 +30,15 @@ local math_sqrt = math.sqrt
 local vector_multiply = vector.multiply
 local vector_new = vector.new
 local vector_zero = vector.zero
+local top_speed = 0
+local dirMax = vector_new()
 
 -- global table for exposed functions
 glider = {
 	version = 20240413.223400,
+	pd = function(...) print(dump(table.pack(...))) end
 }
-
+local pd = glider.pd
 local has_areas = minetest.get_modpath("areas")
 local has_hangglider = minetest.get_modpath("hangglider")
 local has_player_monoids = minetest.get_modpath("player_monoids")
@@ -469,6 +490,25 @@ local on_step = function(self, dtime, moveresult)
 	self.speed = speed
 	update_hud(self.driver, driver, rot,
 		rocket_cooldown - self.time_from_last_rocket, speed, dir.y)
+
+if speed > top_speed then
+top_speed = speed
+--pd('speed', speed)
+end
+if math_abs(dir.x) > dirMax.x then dirMax.x = math_abs(dir.x) end
+if math_abs(dir.y) > dirMax.y then dirMax.y = math_abs(dir.y) end
+if math_abs(dir.z) > dirMax.z then dirMax.z = math_abs(dir.z) end
+DEBUGHUD(driver, "top speed: "..top_speed..' speed: ' .. self.speed
+	.. '\n'
+	--.. 'dir.x: ' .. dir.x
+	.. ' dir.y: ' ..dir.y
+	--.. ' dir.z: '..dir.z
+	.. '\nrocket: ' .. (rocket_cooldown - self.time_from_last_rocket)
+	.. '\n'
+	.. ' x.max: '..dirMax.x..'\n'
+	.. ' y.max: '..dirMax.y..'\n'
+	.. ' z.max: '..dirMax.z..'\n'
+)
 	self.object:set_velocity(dir)
 end
 
@@ -492,6 +532,7 @@ local on_use = function(itemstack, driver, pt) --luacheck: no unused args
 			driver:add_velocity(vel)
 			equip_sound(pos)
 			update_hud(name, driver)
+DEBUGHUD(driver, "")
 		end
 	else
 		if not glider.allow_while_hanggliding then
@@ -628,4 +669,42 @@ end)
 
 print("[glider] loaded with"
 	.. (use_rockets and " " or "out ") .. "rockets.")
+--[[
+DEBUGHUD_CALLBACK = function(player, pos, thing)
+	if not pos then return end
 
+	local sOut = ''
+	local type = thing.type
+	if 'node' == type then
+		sOut = minetest.get_node(pos).name or ''
+	elseif 'object' == type then
+		sOut = thing.ref:get_entity_name()
+		local entity = thing.ref:get_luaentity()
+		if entity and entity.get_staticdata then
+			sOut = sOut .. '\n'
+				.. dump(minetest.deserialize(entity:get_staticdata()))
+		end
+		-- local meta = entity:get_meta()for k, v in pairs(meta:to_table()) do sOut = sOut .. ' ' .. k end
+	end
+	DEBUGHUD(player, sOut)
+end
+minetest.register_globalstep(function()
+	for _,player in pairs(minetest.get_connected_players()) do
+		local eye = vector.add(player:get_pos(), {x=0,y=player:get_properties().eye_height,z=0}) -- player:get_eye_offset()
+		local look = vector.multiply(player:get_look_dir(), 4)
+		ray = Raycast(eye, vector.add(eye, look), true, false)
+		local thing = ray:next()
+		while thing and thing.ref == player do thing = ray:next() end
+		local pos = nil
+		if thing and thing.under and thing.type == "node" then
+			local under = minetest.get_node_or_nil(thing.under)
+			if under and under.name ~= "air" then
+				pos = thing.under
+			end
+		elseif thing and 'drawers:visual' == thing.ref:get_entity_name() then
+			pos = thing.ref:get_pos()
+		end
+		DEBUGHUD_CALLBACK(player, pos, thing)
+	end
+end)
+--]]
